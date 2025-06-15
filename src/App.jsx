@@ -5,7 +5,11 @@ import ToDoForm from './AddTask';
 import ToDo from './Task';
 
 const TASKS_STORAGE_KEY = 'tasks-list-project-web';
-const weatherApiKey = 'c7616da4b68205c2f3ae73df2c31d177';
+const DEFAULT_CITY = {
+  name: "Краснодаре",
+  latitude: 45.0355,
+  longitude: 38.9753
+};
 
 function App() {
   const [rates, setRates] = useState({});
@@ -14,28 +18,53 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Функция для преобразования кода погоды в текст
+  const getWeatherCondition = (code) => {
+    const conditions = {
+      0: 'Ясно',
+      1: 'Преимущественно ясно',
+      2: 'Переменная облачность',
+      3: 'Пасмурно',
+      45: 'Туман',
+      51: 'Легкая морось',
+      53: 'Умеренная морось',
+      55: 'Сильная морось',
+      61: 'Небольшой дождь',
+      63: 'Умеренный дождь',
+      65: 'Сильный дождь',
+      80: 'Ливень',
+      81: 'Сильный ливень',
+      82: 'Очень сильный ливень'
+    };
+    return conditions[code] || 'Неизвестно';
+  };
+
   useEffect(() => {
     async function fetchAllData() {
       try {
-        const { data: currency } = await axios.get('https://www.cbr-xml-daily.ru/daily_json.js');
-        const { USD, EUR } = currency?.Valute || {};
-
-        if (!USD || !EUR) throw new Error('Нет данных о валюте');
+        // Валюты
+        const currency = await axios.get('https://www.cbr-xml-daily.ru/daily_json.js');
+        const { USD, EUR } = currency.data.Valute;
 
         setRates({
           USDrate: USD.Value.toFixed(2).replace('.', ','),
           EURrate: EUR.Value.toFixed(2).replace('.', ',')
         });
 
-        navigator.geolocation.getCurrentPosition(async ({ coords }) => {
-          const { data: weather } = await axios.get(
-            `https://api.openweathermap.org/data/2.5/weather?lat=${coords.latitude}&lon=${coords.longitude}&appid=${weatherApiKey}`
-          );
-          setWeatherData(weather);
+        // Погода для Краснодара
+        const weatherRes = await axios.get(
+          `https://api.open-meteo.com/v1/forecast?latitude=${DEFAULT_CITY.latitude}&longitude=${DEFAULT_CITY.longitude}&current_weather=true`
+        );
+
+        setWeatherData({
+          temp: weatherRes.data.current_weather.temperature,
+          wind_speed: weatherRes.data.current_weather.windspeed,
+          condition: getWeatherCondition(weatherRes.data.current_weather.weathercode)
         });
+
       } catch (err) {
-        setError('Ошибка загрузки данных.');
         console.error(err);
+        setError('Ошибка загрузки данных');
       } finally {
         setLoading(false);
       }
@@ -44,6 +73,7 @@ function App() {
     fetchAllData();
   }, []);
 
+  // Задачи: загрузка и сохранение
   useEffect(() => {
     const stored = localStorage.getItem(TASKS_STORAGE_KEY);
     if (stored) {
@@ -79,6 +109,7 @@ function App() {
     <div className="App">
       {loading && <p>Загрузка...</p>}
       {!loading && error && <p style={{ color: 'red' }}>{error}</p>}
+
       {!loading && !error && (
         <>
           <div className="info">
@@ -86,18 +117,14 @@ function App() {
               <div>Доллар США $ — {rates.USDrate} руб.</div>
               <div>Евро € — {rates.EURrate} руб.</div>
             </div>
+
             {weatherData && (
               <div className="weather-info">
-                <h3>Погода в: {weatherData.name}, {weatherData.sys.country}</h3>
+                <h3>Погода в: {DEFAULT_CITY.name}</h3>
                 <div>
-                  🌡 {(weatherData.main.temp - 273.15).toFixed(1)}°C  
-                  · 💨 {weatherData.wind.speed} м/с  
-                  · ☁ {weatherData.clouds.all}%
-                  <img
-                    className="weather-icon"
-                    src={`http://openweathermap.org/img/w/${weatherData.weather[0].icon}.png`}
-                    alt="Иконка погоды"
-                  />
+                  🌡 Температура: {weatherData.temp}°C<br />
+                  💨 Ветер: {weatherData.wind_speed} м/с<br />
+                  ☁ Состояние: {weatherData.condition}
                 </div>
               </div>
             )}
